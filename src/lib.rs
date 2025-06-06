@@ -9,18 +9,26 @@ pub struct Config {
 }
 
 impl Config {
-    pub fn build(args: &[String]) -> Result<Config, &'static str> {
+    pub fn build(mut args: impl Iterator<Item = String>) -> Result<Config, &'static str> {
+        args.next(); // Skip program name
+
         let mut ignore_case = env::var("IGNORE_CASE").is_ok();
-        let (flags, args): (Vec<_>, Vec<_>) = args.iter().partition(|arg| arg.starts_with("-"));
-        if flags.iter().any(|flag| flag == &"-i") {
-            ignore_case = true;
+        let mut positional_args = Vec::new();
+
+        for arg in args {
+            if arg.starts_with("-") {
+                if arg == "-i" {
+                    ignore_case = true;
+                }
+                // ignore other flags...
+            } else {
+                positional_args.push(arg);
+            }
         }
 
-        if args.len() < 3 {
-            return Err("not enough arguments");
-        }
-        let query = args[1].clone();
-        let file_path = args[2].clone();
+        let mut iter = positional_args.into_iter();
+        let query = iter.next().ok_or("Didn't get a query string")?;
+        let file_path = iter.next().ok_or("Didn't get a file path")?;
 
         Ok(Config {
             query,
@@ -47,28 +55,19 @@ pub fn run(config: Config) -> Result<(), Box<dyn Error>> {
 }
 
 pub fn search<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
-    let mut results = Vec::new();
-
-    for line in contents.lines() {
-        if line.contains(query) {
-            results.push(line);
-        }
-    }
-
-    results
+    contents
+        .lines()
+        .filter(|line| line.contains(query))
+        .collect()
 }
 
 pub fn search_case_insensitive<'a>(query: &str, contents: &'a str) -> Vec<&'a str> {
     let query = query.to_lowercase();
-    let mut results = Vec::new();
 
-    for line in contents.lines() {
-        if line.to_lowercase().contains(&query) {
-            results.push(line);
-        }
-    }
-
-    results
+    contents
+        .lines()
+        .filter(|line| line.to_lowercase().contains(&query))
+        .collect()
 }
 
 #[cfg(test)]
